@@ -10,7 +10,8 @@ defmodule Hedwig.Adapters.Q do
   def init({robot, opts}) do
     :global.register_name("adapter_q", self())
     state = %{
-      robot: robot
+      robot: robot,
+      routes: nil
     }
 
     {:ok, state}
@@ -19,25 +20,28 @@ defmodule Hedwig.Adapters.Q do
   @doc false
   def handle_cast({:emote, msg}, state) do
     Logger.debug "EMOTING > #{inspect msg}"
-    send(msg.ref, msg)
+    Kernal.send(routes[ref], msg)
+    Process.demonitor(routes[ref])
     # send_message(msg.user, msg.text, state)
-    {:noreply, state}
+    {:noreply, %{state | routes: Map.delete(routes, ref)}}
   end
 
   @doc false
   def handle_cast({:reply, msg}, state) do
     Logger.debug "REPLYING > #{inspect msg}"
-    send(msg.ref, msg)
+    Kernal.send(routes[ref], msg)
+    Process.demonitor(routes[ref])
     # send_message(msg.user, msg.text, state)
-    {:noreply, state}
+    {:noreply, %{state | routes: Map.delete(routes, ref)}}
   end
 
   @doc false
-  def handle_cast({:send, msg}, state) do
+  def handle_cast({:send, msg}, %{routes: routes} = state) do
     Logger.debug("SENDING > #{inspect msg}")
-    send(msg.ref, msg)
+    Kernal.send(routes[ref], msg)
+    Process.demonitor(routes[ref])
     # send_message(msg.user, msg.text, state)
-    {:noreply, state}
+    {:noreply, %{state | routes: Map.delete(routes, ref)}}
   end
 
   defp send_message(user, body, state) do
@@ -63,12 +67,13 @@ defmodule Hedwig.Adapters.Q do
     end
   end
 
-  def handle_info({:message, pid, body}, %{robot: robot} = state) do
+  def handle_info({:message, pid, body}, %{robot: robot, routes: routes} = state) do
     Logger.debug "RECEIVED > #{inspect state}"
     msg = parse_message(body)
-    msg = %{msg | ref: pid}
+    msg = %{msg | robot: robot}
+    ref = Process.monitor
     Hedwig.Robot.handle_in(robot, msg)
-    {:noreply, state}
+    {:noreply, %{state | routes: Map.put(routes, msg_ref, {ref, pid})}
   end
 
 
@@ -80,9 +85,12 @@ defmodule Hedwig.Adapters.Q do
 
   defp build_message(%{"from" => user, "message" => text}) do
     %Hedwig.Message {
+      ref: make_ref(),
       text: text,
       type: "chat",
-      user: user
+      user: %Hedwig.User {
+        name: user
+      }
     }
   end
 end

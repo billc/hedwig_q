@@ -36,8 +36,8 @@ if Code.ensure_loaded?(Plug.Conn) and Code.ensure_loaded?(Plug.Adapters.Cowboy) 
 
       receive do
         %Hedwig.Message{text: text} ->
-          send_resp(conn, 200, text)
           Logger.debug "RESPONDING > #{text}"
+          send_resp(conn, 200, text)
         after 10000 ->
           send_resp(conn, 204, "!TIMEOUT OCCURRED")
       end
