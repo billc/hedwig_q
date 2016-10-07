@@ -2,6 +2,7 @@ defmodule Hedwig.Adapters.Q do
   @moduledoc """
   Hedwig adapter that communicates to the instant messenger via Chatbot interface.
   """
+  import Kernel
 
   use Hedwig.Adapter
   require Logger
@@ -11,37 +12,37 @@ defmodule Hedwig.Adapters.Q do
     :global.register_name("adapter_q", self())
     state = %{
       robot: robot,
-      routes: nil
+      routes: %{}
     }
 
     {:ok, state}
   end
 
   @doc false
-  def handle_cast({:emote, msg}, state) do
+  def handle_cast({:emote, %{ref: msg_ref} = msg}, %{routes: routes} = state) do
     Logger.debug "EMOTING > #{inspect msg}"
-    Kernal.send(routes[ref], msg)
-    Process.demonitor(routes[ref])
-    # send_message(msg.user, msg.text, state)
-    {:noreply, %{state | routes: Map.delete(routes, ref)}}
+    {ref, pid} = routes[msg_ref]
+    Kernel.send(pid, msg)
+    Process.demonitor(ref)
+    {:noreply, %{state | routes: Map.delete(routes, msg.ref)}}
   end
 
   @doc false
-  def handle_cast({:reply, msg}, state) do
+  def handle_cast({:reply, %{ref: msg_ref} = msg}, %{routes: routes} = state) do
     Logger.debug "REPLYING > #{inspect msg}"
-    Kernal.send(routes[ref], msg)
-    Process.demonitor(routes[ref])
-    # send_message(msg.user, msg.text, state)
-    {:noreply, %{state | routes: Map.delete(routes, ref)}}
+    {ref, pid} = routes[msg_ref]
+    Kernel.send(pid, msg)
+    Process.demonitor(ref)
+    {:noreply, %{state | routes: Map.delete(routes, msg.ref)}}
   end
 
   @doc false
-  def handle_cast({:send, msg}, %{routes: routes} = state) do
+  def handle_cast({:send, %{ref: msg_ref} = msg}, %{routes: routes} = state) do
     Logger.debug("SENDING > #{inspect msg}")
-    Kernal.send(routes[ref], msg)
-    Process.demonitor(routes[ref])
-    # send_message(msg.user, msg.text, state)
-    {:noreply, %{state | routes: Map.delete(routes, ref)}}
+    {ref, pid} = routes[msg_ref]
+    Kernel.send(pid, msg)
+    Process.demonitor(ref)
+    {:noreply, %{state | routes: Map.delete(routes, msg.ref)}}
   end
 
   defp send_message(user, body, state) do
@@ -71,9 +72,9 @@ defmodule Hedwig.Adapters.Q do
     Logger.debug "RECEIVED > #{inspect state}"
     msg = parse_message(body)
     msg = %{msg | robot: robot}
-    ref = Process.monitor
+    ref = Process.monitor(pid)
     Hedwig.Robot.handle_in(robot, msg)
-    {:noreply, %{state | routes: Map.put(routes, msg_ref, {ref, pid})}
+    {:noreply, %{state | routes: Map.put(routes, msg.ref, {ref, pid})}}
   end
 
 
